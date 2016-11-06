@@ -21,11 +21,13 @@ sseEndpoint = "http://localhost:8080/events"
 type alias Model =
     { custom: Maybe String
     , generic: Maybe String
+    , listeningForCustom: Bool
+    , listeningForGeneric: Bool
     }
 
 init: (Model, Cmd Msg)
 init =
-    ( Model Nothing Nothing, Cmd.none )
+    ( Model Nothing Nothing False False, Cmd.none )
 
 -- Update
 
@@ -33,7 +35,9 @@ type Msg = CustomEvent String
     | GenericEvent String
     | ListenForCustomEvents
     | ListenForGenericEvents
-    | UnknownEvent
+    | NoMoreCustomEvents
+    | NoMoreGenericEvents
+    | UnknownEventType
 
 
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -43,11 +47,15 @@ update msg model =
 
         GenericEvent text -> ({ model | generic = Just text }, Cmd.none)
 
-        ListenForCustomEvents -> (model, listenForEvents sseEndpoint "custom")
+        ListenForCustomEvents -> ({model | listeningForCustom = True}, listenForEvents sseEndpoint "custom")
 
-        ListenForGenericEvents -> (model, listenForMessageEvents sseEndpoint)
+        ListenForGenericEvents -> ({model | listeningForGeneric = True}, listenForMessageEvents sseEndpoint)
 
-        UnknownEvent -> (model, Cmd.none)
+        NoMoreCustomEvents -> ({model | listeningForCustom = False}, stopListeningForTypedEvents "custom")
+
+        NoMoreGenericEvents -> ({model | listeningForGeneric = False}, stopListeningForTypedEvents "message")
+
+        UnknownEventType -> (model, Cmd.none) -- Silently drop events we don't know about. Can't happen anyway.
 
 -- View
 
@@ -56,9 +64,20 @@ view model =
     div []
         [ p [] [text <| Maybe.withDefault "No custom event yet" (Maybe.map (String.append "Last custom event: ") model.custom) ]
         , p [] [text <| Maybe.withDefault "No generic event yet" (Maybe.map (String.append "Last generic event: ") model.generic) ]
-        , p [] [button [onClick ListenForCustomEvents] [text "Listen for custom events"]]
-        , p [] [button [onClick ListenForGenericEvents] [text "Listen for generic events"]]
+        , p [] [eventListeningToggleButton model.listeningForCustom "Listen for custom events" "Stop listening for custom events" ListenForCustomEvents NoMoreCustomEvents]
+        , p [] [eventListeningToggleButton model.listeningForGeneric "Listen for generic events" "Stop listening for generic events" ListenForGenericEvents NoMoreGenericEvents]
         ]
+
+eventListeningToggleButton: Bool -> String -> String -> Msg -> Msg -> Html Msg
+eventListeningToggleButton on offText onText offMsg onMsg =
+    let
+        (txt, msg) =
+            if on then
+                (onText, onMsg)
+            else
+                (offText, offMsg)
+    in
+        button [onClick msg] [text txt]
 
 -- Subscriptions
 
@@ -73,4 +92,4 @@ eventByType ssEvent =
 
         "message" -> GenericEvent ssEvent.data
 
-        _ -> UnknownEvent
+        _ -> UnknownEventType

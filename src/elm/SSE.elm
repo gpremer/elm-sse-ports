@@ -3,7 +3,7 @@ port module SSE exposing ( SsEvent
                          , listenForEvents
                          , events
                          , stopMessageEvents
-                         , stopTypedEvents
+                         , stopListeningForTypedEvents
                          )
 
 type alias SsEvent =
@@ -26,8 +26,9 @@ listenForEvents endpoint eventTypeName =
 
 port stopMessageEvents : () -> Cmd msg
 
-port stopTypedEvents : String -> Cmd msg
+port stopListeningForTypedEvents : String -> Cmd msg
 
-{-| A subscription of SSE events. You should probably transform the SsEvent to an instance of a type o fyour own domain.
+{-| A subscription of SSE events. You should probably transform the SsEvent to an instance of a type in the application
+domain.
 -}
 port events : (SsEvent -> msg) -> Sub msg
