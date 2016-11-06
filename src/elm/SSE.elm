@@ -12,7 +12,9 @@ type alias SsEvent =
     , id : Maybe String
     }
 
-port listenForMessageEvents : String -> Cmd msg
+listenForMessageEvents: String -> Cmd msg
+listenForMessageEvents endpoint =
+    listenForTypedEvents (endpoint, "message")
 
 port listenForTypedEvents : (String, String) -> Cmd msg
 
