@@ -2,7 +2,7 @@
     "version": "1.0.0",
     "summary": "Demonstrate using SSE with Elm",
     "repository": "https://github.com/gpremer/elm-sse-demo.git",
-    "license": "BSD3",
+    "license": "MIT",
     "source-directories": [
         "src/elm/"
     ],
