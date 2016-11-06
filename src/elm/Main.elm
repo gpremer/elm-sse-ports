@@ -43,7 +43,7 @@ update msg model =
 
         GenericEvent text -> ({ model | generic = Just text }, Cmd.none)
 
-        ListenForCustomEvents -> (model, listenForTypedEvents (sseEndpoint, "custom"))
+        ListenForCustomEvents -> (model, listenForEvents sseEndpoint "custom")
 
         ListenForGenericEvents -> (model, listenForMessageEvents sseEndpoint)
 
@@ -54,8 +54,8 @@ update msg model =
 view: Model -> Html Msg
 view model =
     div []
-        [ p [] [text <| Maybe.withDefault "No custom event yet" (Maybe.map ( String.append "Last custom event: ") model.custom) ]
-        , p [] [text <| Maybe.withDefault "No generic event yet" (Maybe.map ( String.append "Last generic event: ") model.generic) ]
+        [ p [] [text <| Maybe.withDefault "No custom event yet" (Maybe.map (String.append "Last custom event: ") model.custom) ]
+        , p [] [text <| Maybe.withDefault "No generic event yet" (Maybe.map (String.append "Last generic event: ") model.generic) ]
         , p [] [button [onClick ListenForCustomEvents] [text "Listen for custom events"]]
         , p [] [button [onClick ListenForGenericEvents] [text "Listen for generic events"]]
         ]
