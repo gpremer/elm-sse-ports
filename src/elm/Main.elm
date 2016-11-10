@@ -23,11 +23,15 @@ type alias Model =
     , generic: Maybe String
     , listeningForCustom: Bool
     , listeningForGeneric: Bool
+    , sse: SseAccess Msg
     }
 
 init: (Model, Cmd Msg)
 init =
-    ( Model Nothing Nothing False False, Cmd.none )
+    let
+        sseAccess = SSE.create sseEndpoint UnknownEventType
+    in
+        ( Model Nothing Nothing False False sseAccess , Cmd.none )
 
 -- Update
 
@@ -39,7 +43,6 @@ type Msg = CustomEvent String
     | NoMoreGenericEvents
     | UnknownEventType
 
-
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
     case msg of
@@ -47,13 +50,37 @@ update msg model =
 
         GenericEvent text -> ({ model | generic = Just text }, Cmd.none)
 
-        ListenForCustomEvents -> ({model | listeningForCustom = True}, listenForEvents sseEndpoint "custom")
+        ListenForCustomEvents ->
+            let
+                (sse, cmd) = model.sse |> addListener "custom" (\ev -> CustomEvent ev.data)
+            in
+                ( {model | listeningForCustom = True, sse = sse }
+                , cmd
+                )
 
-        ListenForGenericEvents -> ({model | listeningForGeneric = True}, listenForMessageEvents sseEndpoint)
+        ListenForGenericEvents ->
+            let
+                (sse, cmd) = model.sse |> addListener "message" (\ev -> GenericEvent ev.data)
+            in
+                ( {model | listeningForGeneric = True, sse = sse }
+                , cmd
+                )
 
-        NoMoreCustomEvents -> ({model | listeningForCustom = False}, stopListeningForTypedEvents "custom")
+        NoMoreCustomEvents ->
+            let
+                (sse, cmd) = model.sse |> removeListener "custom"
+            in
+                ( {model | listeningForCustom = False, sse = sse }
+                , cmd
+                )
 
-        NoMoreGenericEvents -> ({model | listeningForGeneric = False}, stopListeningForTypedEvents "message")
+        NoMoreGenericEvents ->
+            let
+                (sse, cmd) = model.sse |> removeListener "message"
+            in
+                ( {model | listeningForGeneric = False, sse = sse }
+                , cmd
+                )
 
         UnknownEventType -> (model, Cmd.none) -- Silently drop events we don't know about. Can't happen anyway.
 
@@ -83,13 +110,4 @@ eventListeningToggleButton on offText onText offMsg onMsg =
 
 subscriptions: Model -> Sub Msg
 subscriptions model =
-    events eventByType
-
-eventByType: SsEvent -> Msg
-eventByType ssEvent =
-    case ssEvent.eventType of
-        "custom" -> CustomEvent ssEvent.data
-
-        "message" -> GenericEvent ssEvent.data
-
-        _ -> UnknownEventType
+    serverSideEvents model.sse

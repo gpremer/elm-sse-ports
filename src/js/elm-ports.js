@@ -4,22 +4,46 @@
 function initElmPorts(app) {
     var sources = {};
 
-    app.ports.listenForTypedEvents.subscribe(function (addressAndEventType) {
+    function sendEventToElm(event) {
+        app.ports.ssEventsJS.send({
+            data: event.data || '', // TODO make this a Maybe?
+            eventType: event.type,
+            id: event.id || null
+        });
+
+    }
+
+    app.ports.createEventSourceJS.subscribe(function (address) {
+        sources[address] = new EventSource(address); // we only call if there isn't one yet
+    });
+
+    app.ports.addListenerJS.subscribe(function (addressAndEventType) {
         var address = addressAndEventType[0];
         var eventType = addressAndEventType[1];
-        if (!sources[eventType]) {
-            console.log("Subscribing for events on " + address + " of type " + eventType);
-            sources[eventType] = new EventSource(address);
-            sources[eventType].addEventListener(eventType, function (event) {
-                app.ports.events.send({data: event.data || '', eventType: eventType, id: event.id || ''});
-            });
-        }
+
+        var eventSource = sources[address]; // we only call if it exists
+        eventSource.addEventListener(eventType, sendEventToElm);
     });
-    app.ports.stopListeningForTypedEvents.subscribe(function (eventType) {
-        var source = sources[eventType];
-        if (source) {
-            source.close();
-            delete sources[eventType];
-        }
+
+    app.ports.createEventSourceAndAddListenerJS.subscribe(function (addressAndEventType) {
+        var address = addressAndEventType[0];
+        var eventType = addressAndEventType[1];
+
+        sources[address] = new EventSource(address); // we only call if there isn't one yet
+        var eventSource = sources[address];
+        eventSource.addEventListener(eventType, sendEventToElm);
+    });
+
+    app.ports.removeListenerJS.subscribe(function (addressAndEventType) {
+        var address = addressAndEventType[0];
+        var eventType = addressAndEventType[1];
+
+        var eventSource = sources[address]; // we only call if it exists
+        eventSource.removeEventListener(eventType, sendEventToElm);
+    });
+
+    app.ports.deleteEventSourceJS.subscribe(function (address) {
+        sources[address].close(); // we only call if it exists
+        delete sources[address]; // we only call if it exists
     });
 }
