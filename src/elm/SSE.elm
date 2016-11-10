@@ -1,6 +1,9 @@
 port module SSE exposing ( SsEvent
+                         , EventType
+                         , Endpoint
                          , SseAccess
                          , SseEventDecoder
+                         , hasListenerFor
                          , create
                          , addListener
                          , removeListener
@@ -29,6 +32,10 @@ type alias SseAccess msg =
     , decoders : Dict String (SseEventDecoder msg)
     , defaultMsg : msg
     }
+
+hasListenerFor: EventType -> SseAccess msg -> Bool
+hasListenerFor eventType sseAccess =
+    Dict.member eventType sseAccess.decoders
 
 {-| Create a new SseAccess instance. This is instance is not yet listening for SSE events. That only happens when the
 first listener is attached.

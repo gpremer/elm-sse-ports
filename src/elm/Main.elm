@@ -21,8 +21,6 @@ sseEndpoint = "http://localhost:8080/events"
 type alias Model =
     { custom: Maybe String
     , generic: Maybe String
-    , listeningForCustom: Bool
-    , listeningForGeneric: Bool
     , sse: SseAccess Msg
     }
 
@@ -31,7 +29,13 @@ init =
     let
         sseAccess = SSE.create sseEndpoint UnknownEventType
     in
-        ( Model Nothing Nothing False False sseAccess , Cmd.none )
+        ( Model Nothing Nothing sseAccess , Cmd.none )
+
+customEvents: EventType
+customEvents = "custom"
+
+genericEvents: EventType
+genericEvents = "message"
 
 -- Update
 
@@ -52,37 +56,41 @@ update msg model =
 
         ListenForCustomEvents ->
             let
-                (sse, cmd) = model.sse |> addListener "custom" (\ev -> CustomEvent ev.data)
+                (sse, cmd) = model.sse |> addListener customEvents (\ev -> CustomEvent ev.data)
             in
-                ( {model | listeningForCustom = True, sse = sse }
+                ( {model | sse = sse }
                 , cmd
                 )
 
         ListenForGenericEvents ->
             let
-                (sse, cmd) = model.sse |> addListener "message" (\ev -> GenericEvent ev.data)
+                (sse, cmd) = model.sse |> addListener genericEvents (\ev -> GenericEvent ev.data)
             in
-                ( {model | listeningForGeneric = True, sse = sse }
+                ( {model | sse = sse }
                 , cmd
                 )
 
         NoMoreCustomEvents ->
             let
-                (sse, cmd) = model.sse |> removeListener "custom"
+                (sse, cmd) = model.sse |> removeListener customEvents
             in
-                ( {model | listeningForCustom = False, sse = sse }
+                ( {model | sse = sse }
                 , cmd
                 )
 
         NoMoreGenericEvents ->
             let
-                (sse, cmd) = model.sse |> removeListener "message"
+                (sse, cmd) = model.sse |> removeListener genericEvents
             in
-                ( {model | listeningForGeneric = False, sse = sse }
+                ( {model | sse = sse }
                 , cmd
                 )
 
         UnknownEventType -> (model, Cmd.none) -- Silently drop events we don't know about. Can't happen anyway.
+
+listeningFor: Model -> EventType -> Bool
+listeningFor model eventType =
+    SSE.hasListenerFor eventType model.sse
 
 -- View
 
@@ -91,8 +99,8 @@ view model =
     div []
         [ p [] [text <| Maybe.withDefault "No custom event yet" (Maybe.map (String.append "Last custom event: ") model.custom) ]
         , p [] [text <| Maybe.withDefault "No generic event yet" (Maybe.map (String.append "Last generic event: ") model.generic) ]
-        , p [] [eventListeningToggleButton model.listeningForCustom "Listen for custom events" "Stop listening for custom events" ListenForCustomEvents NoMoreCustomEvents]
-        , p [] [eventListeningToggleButton model.listeningForGeneric "Listen for generic events" "Stop listening for generic events" ListenForGenericEvents NoMoreGenericEvents]
+        , p [] [eventListeningToggleButton (listeningFor model customEvents) "Listen for custom events" "Stop listening for custom events" ListenForCustomEvents NoMoreCustomEvents]
+        , p [] [eventListeningToggleButton (listeningFor model genericEvents) "Listen for generic events" "Stop listening for generic events" ListenForGenericEvents NoMoreGenericEvents]
         ]
 
 eventListeningToggleButton: Bool -> String -> String -> Msg -> Msg -> Html Msg
