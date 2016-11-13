@@ -4,6 +4,8 @@ import Html exposing (..)
 import Html.App as App
 import Html.Events exposing (..)
 import String
+import Json.Decode.Extra
+import Maybe.Extra
 
 import SSE exposing (..)
 
@@ -19,7 +21,8 @@ sseEndpoint = "http://localhost:8080/events"
 -- model
 
 type alias Model =
-    { custom: Maybe String
+    { point2d: Maybe String
+    , point3d: Maybe String
     , generic: Maybe String
     , sse: SseAccess Msg
     }
@@ -27,81 +30,114 @@ type alias Model =
 init: (Model, Cmd Msg)
 init =
     let
-        sseAccess = SSE.create sseEndpoint UnknownEventType
+        sseAccess = SSE.create sseEndpoint Noop
     in
-        ( Model Nothing Nothing sseAccess , Cmd.none )
+        ( Model Nothing Nothing Nothing sseAccess , Cmd.none )
 
-customEvents: EventType
-customEvents = "custom"
+points2dEventType: EventType
+points2dEventType = "2dpoint"
+
+points3dEventType: EventType
+points3dEventType = "3dpoint"
 
 genericEvents: EventType
 genericEvents = "message"
 
 -- Update
 
-type Msg = CustomEvent String
+type Msg = New2dPoint String
+    | New3dPoint String
     | GenericEvent String
-    | ListenForCustomEvents
+    | ListenFor2dPoints
+    | ListenFor3dPoints
     | ListenForGenericEvents
-    | NoMoreCustomEvents
+    | NoMore2dPoints
+    | NoMore3dPoints
     | NoMoreGenericEvents
-    | UnknownEventType
+    | Noop
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
     case msg of
-        CustomEvent text -> ({ model | custom = Just text }, Cmd.none)
+        New2dPoint text -> ({ model | point2d = Just text }, Cmd.none)
+
+        New3dPoint text -> ({ model | point3d = Just text }, Cmd.none)
 
         GenericEvent text -> ({ model | generic = Just text }, Cmd.none)
 
-        ListenForCustomEvents ->
+        ListenFor2dPoints ->
             let
-                (sse, cmd) = model.sse |> addListener customEvents (\ev -> CustomEvent ev.data)
+                decoder = \ev -> New2dPoint ev.data
             in
-                ( {model | sse = sse }
-                , cmd
-                )
+                setSseAndDo model (withListener points2dEventType decoder)
+
+        ListenFor3dPoints ->
+            let
+                decoder = \ev -> New3dPoint ev.data
+            in
+                setSseAndDo model (withListener points3dEventType decoder)
 
         ListenForGenericEvents ->
             let
-                (sse, cmd) = model.sse |> addListener genericEvents (\ev -> GenericEvent ev.data)
+                untypedDecoder =  \ev -> GenericEvent ev.data
             in
-                ( {model | sse = sse }
-                , cmd
-                )
+                setSseAndDo model (withUntypedListener untypedDecoder)
 
-        NoMoreCustomEvents ->
-            let
-                (sse, cmd) = model.sse |> removeListener customEvents
-            in
-                ( {model | sse = sse }
-                , cmd
-                )
+        NoMore2dPoints ->
+            setSseAndDo model (withoutListener points2dEventType)
+
+        NoMore3dPoints ->
+            setSseAndDo model (withoutListener points3dEventType)
 
         NoMoreGenericEvents ->
-            let
-                (sse, cmd) = model.sse |> removeListener genericEvents
-            in
-                ( {model | sse = sse }
-                , cmd
-                )
+            setSseAndDo model withoutUntypedListener
 
-        UnknownEventType -> (model, Cmd.none) -- Silently drop events we don't know about. Can't happen anyway.
+        Noop -> (model, Cmd.none) -- Silently drop events we don't know about. Can't happen anyway.
 
-listeningFor: Model -> EventType -> Bool
-listeningFor model eventType =
-    SSE.hasListenerFor eventType model.sse
+
+setSseAndDo: Model -> (SseAccess Msg -> (SseAccess Msg, Cmd Msg)) -> (Model, Cmd Msg)
+setSseAndDo model f =
+    let
+        (sse, cmd) = f model.sse
+    in
+        ( {model | sse = sse }
+        , cmd
+        )
 
 -- View
 
 view: Model -> Html Msg
 view model =
     div []
-        [ p [] [text <| Maybe.withDefault "No custom event yet" (Maybe.map (String.append "Last custom event: ") model.custom) ]
+        [ p [] [text <| Maybe.withDefault "No 2d point yet" (Maybe.map (String.append "Last 2d point: ") model.point2d) ]
+        , p [] [text <| Maybe.withDefault "No 3d point yet" (Maybe.map (String.append "Last 3d point: ") model.point3d) ]
         , p [] [text <| Maybe.withDefault "No generic event yet" (Maybe.map (String.append "Last generic event: ") model.generic) ]
-        , p [] [eventListeningToggleButton (listeningFor model customEvents) "Listen for custom events" "Stop listening for custom events" ListenForCustomEvents NoMoreCustomEvents]
-        , p [] [eventListeningToggleButton (listeningFor model genericEvents) "Listen for generic events" "Stop listening for generic events" ListenForGenericEvents NoMoreGenericEvents]
+        , sseButtons model
         ]
+
+sseButtons : Model -> Html Msg
+sseButtons model =
+    div [] <| List.map (\f -> f model) [ textButton, points2dButton, points3dButton ]
+
+textButton: Model -> Html Msg
+textButton model =
+    eventListeningToggleButton (listeningForGeneric  model ) "Listen for text events" "Stop listening for text events" ListenForGenericEvents NoMoreGenericEvents
+
+points2dButton: Model -> Html Msg
+points2dButton model =
+    eventListeningToggleButton (listeningFor points2dEventType model) "Listen for 2d points" "Stop listening for 2d points" ListenFor2dPoints NoMore2dPoints
+
+points3dButton: Model -> Html Msg
+points3dButton model =
+    eventListeningToggleButton (listeningFor points3dEventType model) "Listen for 3d points" "Stop listening for 3d points" ListenFor3dPoints NoMore3dPoints
+
+listeningFor: EventType -> Model -> Bool
+listeningFor eventType model =
+    SSE.hasListenerFor eventType model.sse
+
+listeningForGeneric: Model -> Bool
+listeningForGeneric model =
+    Maybe.Extra.isJust model.sse.untypedDecoder
 
 eventListeningToggleButton: Bool -> String -> String -> Msg -> Msg -> Html Msg
 eventListeningToggleButton on offText onText offMsg onMsg =

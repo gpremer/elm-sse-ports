@@ -6,32 +6,50 @@ function initElmPorts(app) {
 
     function sendEventToElm(event) {
         app.ports.ssEventsJS.send({
-            data: event.data || '', // TODO make this a Maybe?
-            eventType: event.type,
+            data: event.data, // Can't be null according to spec
+            eventType: event.type, // Can't be because we listen for this event type
             id: event.id || null
         });
-
     }
 
-    app.ports.createEventSourceJS.subscribe(function (address) {
+    // We could have one function for typed and untyped, but then need to either expose Maybe to users or make
+    // superfluous copy.
+    function sendUntypedEventToElm(event) {
+        app.ports.ssUntypedEventsJS.send({
+            data: event.data, // Can't be null according to spec
+            eventType: null,
+            id: event.id || null
+        });
+    }
+
+    function createNewEventSource(address) {
         sources[address] = new EventSource(address); // we only call if there isn't one yet
-    });
+
+        return sources[address];
+    }
+
+    app.ports.createEventSourceJS.subscribe(createNewEventSource);
 
     app.ports.addListenerJS.subscribe(function (addressAndEventType) {
         var address = addressAndEventType[0];
         var eventType = addressAndEventType[1];
 
         var eventSource = sources[address]; // we only call if it exists
-        eventSource.addEventListener(eventType, sendEventToElm);
+        if ( eventType )
+            eventSource.addEventListener(eventType, sendEventToElm);
+        else
+            eventSource.onmessage = sendUntypedEventToElm;
     });
 
     app.ports.createEventSourceAndAddListenerJS.subscribe(function (addressAndEventType) {
         var address = addressAndEventType[0];
         var eventType = addressAndEventType[1];
 
-        sources[address] = new EventSource(address); // we only call if there isn't one yet
-        var eventSource = sources[address];
-        eventSource.addEventListener(eventType, sendEventToElm);
+        var eventSource = createNewEventSource(address);
+        if ( eventType )
+            eventSource.addEventListener(eventType, sendEventToElm);
+        else
+            eventSource.onmessage = sendUntypedEventToElm;
     });
 
     app.ports.removeListenerJS.subscribe(function (addressAndEventType) {
