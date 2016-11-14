@@ -4,8 +4,10 @@ import Html exposing (..)
 import Html.App as App
 import Html.Events exposing (..)
 import String
-import Json.Decode.Extra
+import Json.Decode as Decode exposing (..)
+import Json.Decode.Extra as Decode exposing ((|:))
 import Maybe.Extra
+import Result.Extra as Result exposing (mapBoth)
 
 import SSE exposing (..)
 
@@ -19,6 +21,17 @@ main =
 sseEndpoint = "http://localhost:8080/events"
 
 -- model
+
+type alias Point2d =
+    { x: Float
+    , y: Float
+    }
+
+type alias Point3d =
+    { x: Float
+    , y: Float
+    , z: Float
+    }
 
 type alias Model =
     { point2d: Maybe String
@@ -45,8 +58,8 @@ genericEvents = "message"
 
 -- Update
 
-type Msg = New2dPoint String
-    | New3dPoint String
+type Msg = New2dPoint (Result String Point2d)
+    | New3dPoint (Result String Point3d)
     | GenericEvent String
     | ListenFor2dPoints
     | ListenFor3dPoints
@@ -59,23 +72,17 @@ type Msg = New2dPoint String
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
     case msg of
-        New2dPoint text -> ({ model | point2d = Just text }, Cmd.none)
+        New2dPoint result -> ({ model | point2d = result |> Result.mapBoth identity showPoint2d |> Just }, Cmd.none)
 
-        New3dPoint text -> ({ model | point3d = Just text }, Cmd.none)
+        New3dPoint result -> ({ model | point3d = result |> Result.mapBoth identity showPoint3d |> Just }, Cmd.none)
 
         GenericEvent text -> ({ model | generic = Just text }, Cmd.none)
 
         ListenFor2dPoints ->
-            let
-                decoder = \ev -> New2dPoint ev.data
-            in
-                setSseAndDo model (withListener points2dEventType decoder)
+            setSseAndDo model (withListener points2dEventType points2dEventDecoder)
 
         ListenFor3dPoints ->
-            let
-                decoder = \ev -> New3dPoint ev.data
-            in
-                setSseAndDo model (withListener points3dEventType decoder)
+            setSseAndDo model (withListener points3dEventType points3dEventDecoder)
 
         ListenForGenericEvents ->
             let
@@ -103,6 +110,35 @@ setSseAndDo model f =
         ( {model | sse = sse }
         , cmd
         )
+
+points2dEventDecoder: SsEvent -> Msg
+points2dEventDecoder event =
+    New2dPoint (decodeString point2dDecoder event.data)
+
+points3dEventDecoder: SsEvent -> Msg
+points3dEventDecoder event =
+    New3dPoint (decodeString point3dDecoder event.data)
+
+point2dDecoder: Decoder Point2d
+point2dDecoder =
+    Decode.succeed Point2d
+        |: ("x" := Decode.float)
+        |: ("y" := Decode.float)
+
+point3dDecoder: Decoder Point3d
+point3dDecoder =
+    Decode.succeed Point3d
+        |: ("x" := Decode.float)
+        |: ("y" := Decode.float)
+        |: ("z" := Decode.float)
+
+showPoint2d: Point2d -> String
+showPoint2d point =
+    "(" ++ toString point.x ++ ", " ++ toString point.y ++ ")"
+
+showPoint3d: Point3d -> String
+showPoint3d point =
+    "(" ++ toString point.x ++ ", " ++ toString point.y ++ ", " ++ toString point.z ++ ")"
 
 -- View
 
