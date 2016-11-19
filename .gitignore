@@ -2,3 +2,5 @@ archive
 node_modules
 dist
 .idea
+elm-stuff/build-artifacts
+elm-stuff/packages
